@@ -31,13 +31,13 @@ namespace Injection {
             );
             
             if (!remoteDllPath) {
-                Core::Logger::Error("ProcessInjector: VirtualAllocEx failed");
+                Core::Logger::Error("ProcessInjector: 虚拟内存分配失败 (VirtualAllocEx failed)");
                 return false;
             }
             
             // 步骤 2: 将 DLL 路径写入目标进程
             if (!WriteProcessMemory(hProcess, remoteDllPath, dllPath.c_str(), dllPathSize, NULL)) {
-                Core::Logger::Error("ProcessInjector: WriteProcessMemory failed");
+                Core::Logger::Error("ProcessInjector: 写入进程内存失败 (WriteProcessMemory failed)");
                 VirtualFreeEx(hProcess, remoteDllPath, 0, MEM_RELEASE);
                 return false;
             }
@@ -45,7 +45,7 @@ namespace Injection {
             // 步骤 3: 获取 LoadLibraryW 地址 (Kernel32.dll 在所有进程中地址相同)
             HMODULE hKernel32 = GetModuleHandleW(L"kernel32.dll");
             if (!hKernel32) {
-                Core::Logger::Error("ProcessInjector: GetModuleHandleW(kernel32) failed");
+                Core::Logger::Error("ProcessInjector: 获取 Kernel32 句柄失败");
                 VirtualFreeEx(hProcess, remoteDllPath, 0, MEM_RELEASE);
                 return false;
             }
@@ -53,7 +53,7 @@ namespace Injection {
             LPTHREAD_START_ROUTINE loadLibraryAddr = 
                 (LPTHREAD_START_ROUTINE)GetProcAddress(hKernel32, "LoadLibraryW");
             if (!loadLibraryAddr) {
-                Core::Logger::Error("ProcessInjector: GetProcAddress(LoadLibraryW) failed");
+                Core::Logger::Error("ProcessInjector: 获取 LoadLibraryW 地址失败");
                 VirtualFreeEx(hProcess, remoteDllPath, 0, MEM_RELEASE);
                 return false;
             }
@@ -70,7 +70,7 @@ namespace Injection {
             );
             
             if (!hThread) {
-                Core::Logger::Error("ProcessInjector: CreateRemoteThread failed");
+                Core::Logger::Error("ProcessInjector: 创建远程线程失败 (CreateRemoteThread failed)");
                 VirtualFreeEx(hProcess, remoteDllPath, 0, MEM_RELEASE);
                 return false;
             }
@@ -82,7 +82,8 @@ namespace Injection {
             CloseHandle(hThread);
             VirtualFreeEx(hProcess, remoteDllPath, 0, MEM_RELEASE);
             
-            Core::Logger::Info("ProcessInjector: DLL injected successfully");
+            // 详细日志将在上层调用处 Hooks.cpp 中记录，此处保留简单的内部成功日志
+            Core::Logger::Info("ProcessInjector: 远程线程执行完成");
             return true;
         }
         

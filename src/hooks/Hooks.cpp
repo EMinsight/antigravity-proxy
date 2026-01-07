@@ -80,7 +80,7 @@ int PerformProxyConnect(SOCKET s, const struct sockaddr* name, int namelen, bool
     
     // 如果配置了代理
     if (config.proxy.port != 0) {
-        Core::Logger::Info("Redirecting " + originalHost + ":" + std::to_string(originalPort) + " to proxy");
+        Core::Logger::Info("正重定向 " + originalHost + ":" + std::to_string(originalPort) + " 到代理");
         
         // 修改目标地址为代理服务器
         sockaddr_in proxyAddr = *addr;
@@ -93,28 +93,27 @@ int PerformProxyConnect(SOCKET s, const struct sockaddr* name, int namelen, bool
             fpConnect(s, (sockaddr*)&proxyAddr, sizeof(proxyAddr));
         
         if (result != 0) {
-            Core::Logger::Error("Failed to connect to proxy");
+            Core::Logger::Error("连接代理服务器失败");
             return result;
         }
         
-        // 执行代理协议握手
         if (config.proxy.type == "socks5") {
             // SOCKS5 代理握手
             if (!Network::Socks5Client::Handshake(s, originalHost, originalPort)) {
-                Core::Logger::Error("SOCKS5 handshake failed");
+                Core::Logger::Error("SOCKS5 握手失败");
                 WSASetLastError(WSAECONNREFUSED);
                 return SOCKET_ERROR;
             }
         } else if (config.proxy.type == "http") {
             // HTTP CONNECT 代理握手 (Clash 混合端口推荐)
             if (!Network::HttpConnectClient::Handshake(s, originalHost, originalPort)) {
-                Core::Logger::Error("HTTP CONNECT handshake failed");
+                Core::Logger::Error("HTTP CONNECT 握手失败");
                 WSASetLastError(WSAECONNREFUSED);
                 return SOCKET_ERROR;
             }
         } else {
             // 未知代理类型，记录警告但继续 (可能是直连模式)
-            Core::Logger::Error("Unknown proxy type: " + config.proxy.type);
+            Core::Logger::Error("未知代理类型: " + config.proxy.type);
             WSASetLastError(WSAECONNREFUSED);
             return SOCKET_ERROR;
         }
@@ -145,7 +144,7 @@ int WSAAPI DetourGetAddrInfo(PCSTR pNodeName, PCSTR pServiceName,
     
     // 如果启用了 FakeIP 且有域名请求
     if (pNodeName && config.fakeIp.enabled) {
-        Core::Logger::Info("getaddrinfo intercepted: " + std::string(pNodeName));
+        Core::Logger::Info("拦截到域名解析: " + std::string(pNodeName));
         
         // 分配虚拟 IP
         uint32_t fakeIp = Network::FakeIP::Instance().Alloc(pNodeName);
@@ -212,12 +211,34 @@ BOOL WINAPI DetourCreateProcessW(
     );
     
     if (result && needInject && lpProcessInformation) {
-        Core::Logger::Info("CreateProcessW intercepted, injecting DLL...");
+        Core::Logger::Info("拦截到进程创建，准备注入 DLL...");
         
         // 注入 DLL 到子进程
         std::wstring dllPath = Injection::ProcessInjector::GetCurrentDllPath();
         if (!dllPath.empty()) {
             Injection::ProcessInjector::InjectDll(lpProcessInformation->hProcess, dllPath);
+            
+            // 记录详细注入信息
+            std::string appName = "Unknown";
+            LPCWSTR targetStr = lpApplicationName ? lpApplicationName : lpCommandLine;
+            if (targetStr) {
+                 int len = WideCharToMultiByte(CP_ACP, 0, targetStr, -1, NULL, 0, NULL, NULL);
+                 if (len > 0) {
+                     std::vector<char> buf(len);
+                     WideCharToMultiByte(CP_ACP, 0, targetStr, -1, buf.data(), len, NULL, NULL);
+                     appName = buf.data();
+                     // 简单处理：提取文件名
+                     size_t lastSlash = appName.find_last_of("\\/");
+                     if (lastSlash != std::string::npos) appName = appName.substr(lastSlash + 1);
+                     // 去掉可能的引号
+                     if (!appName.empty() && appName.front() == '\"') appName.erase(0, 1);
+                     if (!appName.empty() && appName.back() == '\"') appName.pop_back(); 
+                     // 再次过滤可能的参数（针对 lpCommandLine）
+                     size_t firstSpace = appName.find(' ');
+                     if (firstSpace != std::string::npos) appName = appName.substr(0, firstSpace);
+                 }
+            }
+            Core::Logger::Info("[成功] 已注入目标进程: " + appName + " (PID: " + std::to_string(lpProcessInformation->dwProcessId) + ") - 父子关系建立");
         }
         
         // 如果原始调用没有要求挂起，则恢复进程
@@ -278,7 +299,7 @@ int WSAAPI DetourWSARecv(
 namespace Hooks {
     void Install() {
         if (MH_Initialize() != MH_OK) {
-            Core::Logger::Error("MinHook Init Failed");
+            Core::Logger::Error("MinHook 初始化失败");
             return;
         }
         
@@ -287,19 +308,19 @@ namespace Hooks {
         // Hook connect
         if (MH_CreateHookApi(L"ws2_32.dll", "connect", 
                              (LPVOID)DetourConnect, (LPVOID*)&fpConnect) != MH_OK) {
-            Core::Logger::Error("Hook connect failed");
+            Core::Logger::Error("Hook connect 失败");
         }
         
         // Hook WSAConnect
         if (MH_CreateHookApi(L"ws2_32.dll", "WSAConnect", 
                              (LPVOID)DetourWSAConnect, (LPVOID*)&fpWSAConnect) != MH_OK) {
-            Core::Logger::Error("Hook WSAConnect failed");
+            Core::Logger::Error("Hook WSAConnect 失败");
         }
         
         // Hook getaddrinfo
         if (MH_CreateHookApi(L"ws2_32.dll", "getaddrinfo", 
                              (LPVOID)DetourGetAddrInfo, (LPVOID*)&fpGetAddrInfo) != MH_OK) {
-            Core::Logger::Error("Hook getaddrinfo failed");
+            Core::Logger::Error("Hook getaddrinfo 失败");
         }
         
         // ===== Phase 2: 进程创建 Hook =====
@@ -307,7 +328,7 @@ namespace Hooks {
         // Hook CreateProcessW
         if (MH_CreateHookApi(L"kernel32.dll", "CreateProcessW",
                              (LPVOID)DetourCreateProcessW, (LPVOID*)&fpCreateProcessW) != MH_OK) {
-            Core::Logger::Error("Hook CreateProcessW failed");
+            Core::Logger::Error("Hook CreateProcessW 失败");
         }
         
         // ===== Phase 3: 流量监控 Hooks =====
@@ -315,31 +336,31 @@ namespace Hooks {
         // Hook send
         if (MH_CreateHookApi(L"ws2_32.dll", "send",
                              (LPVOID)DetourSend, (LPVOID*)&fpSend) != MH_OK) {
-            Core::Logger::Error("Hook send failed");
+            Core::Logger::Error("Hook send 失败");
         }
         
         // Hook recv
         if (MH_CreateHookApi(L"ws2_32.dll", "recv",
                              (LPVOID)DetourRecv, (LPVOID*)&fpRecv) != MH_OK) {
-            Core::Logger::Error("Hook recv failed");
+            Core::Logger::Error("Hook recv 失败");
         }
         
         // Hook WSASend
         if (MH_CreateHookApi(L"ws2_32.dll", "WSASend",
                              (LPVOID)DetourWSASend, (LPVOID*)&fpWSASend) != MH_OK) {
-            Core::Logger::Error("Hook WSASend failed");
+            Core::Logger::Error("Hook WSASend 失败");
         }
         
         // Hook WSARecv
         if (MH_CreateHookApi(L"ws2_32.dll", "WSARecv",
                              (LPVOID)DetourWSARecv, (LPVOID*)&fpWSARecv) != MH_OK) {
-            Core::Logger::Error("Hook WSARecv failed");
+            Core::Logger::Error("Hook WSARecv 失败");
         }
         
         if (MH_EnableHook(MH_ALL_HOOKS) != MH_OK) {
-            Core::Logger::Error("Enable Hooks failed");
+            Core::Logger::Error("启用 Hooks 失败");
         } else {
-            Core::Logger::Info("All Hooks Installed Successfully (Phase 1-3)");
+            Core::Logger::Info("所有 API Hook 安装成功 (Phase 1-3)");
         }
     }
     

@@ -26,10 +26,10 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
         // 初始化 version.dll 代理 (必须最先执行)
         if (!VersionProxy::Initialize()) {
             // 即使代理初始化失败，也继续运行以避免程序崩溃 (Fail-Safe)
-            Core::Logger::Error("VersionProxy initialization failed");
+            Core::Logger::Error("VersionProxy 初始化失败");
         }
         
-        Core::Logger::Info("Antigravity-Proxy DLL Loaded (as version.dll)");
+        Core::Logger::Info("Antigravity-Proxy DLL 已加载 (模拟 version.dll)");
         
         // 加载配置
         Core::Config::Instance().Load("config.json");
@@ -41,7 +41,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
     case DLL_PROCESS_DETACH:
         Hooks::Uninstall();
         VersionProxy::Uninitialize();
-        Core::Logger::Info("Antigravity-Proxy DLL Unloaded");
+        Core::Logger::Info("Antigravity-Proxy DLL 已卸载");
         break;
     }
     return TRUE;

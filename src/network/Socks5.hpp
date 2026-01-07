@@ -45,20 +45,20 @@ namespace Network {
             // +----+----------+----------+
             uint8_t authRequest[3] = { Socks5::VERSION, 0x01, Socks5::AUTH_NONE };
             if (send(sock, (char*)authRequest, 3, 0) != 3) {
-                Core::Logger::Error("SOCKS5: Failed to send auth request");
+                Core::Logger::Error("SOCKS5: 发送认证请求失败");
                 return false;
             }
             
             // Receive Auth Method Response
             uint8_t authResponse[2];
             if (!ReadExact(sock, authResponse, 2)) {
-                Core::Logger::Error("SOCKS5: Failed to read auth response");
+                Core::Logger::Error("SOCKS5: 读取认证响应失败");
                 return false;
             }
             
             if (authResponse[0] != Socks5::VERSION || authResponse[1] != Socks5::AUTH_NONE) {
-                Core::Logger::Error("SOCKS5: Auth not supported. Ver=" + 
-                    std::to_string(authResponse[0]) + ", Method=" + std::to_string(authResponse[1]));
+                Core::Logger::Error("SOCKS5: 不支持的认证方式. 版本=" + 
+                    std::to_string(authResponse[0]) + ", 方法=" + std::to_string(authResponse[1]));
                 return false;
             }
             
@@ -92,7 +92,7 @@ namespace Network {
             request.push_back(targetPort & 0xFF);
             
             if (send(sock, (char*)request.data(), (int)request.size(), 0) != (int)request.size()) {
-                Core::Logger::Error("SOCKS5: Failed to send connect request");
+                Core::Logger::Error("SOCKS5: 发送连接请求失败");
                 return false;
             }
             
@@ -102,17 +102,17 @@ namespace Network {
             // Read Header: VER, REP, RSV, ATYP
             uint8_t header[4];
             if (!ReadExact(sock, header, 4)) {
-                Core::Logger::Error("SOCKS5: Failed to read response header");
+                Core::Logger::Error("SOCKS5: 读取响应头失败");
                 return false;
             }
             
             if (header[0] != Socks5::VERSION) {
-                Core::Logger::Error("SOCKS5: Invalid protocol version in response: " + std::to_string(header[0]));
+                Core::Logger::Error("SOCKS5: 响应版本无效: " + std::to_string(header[0]));
                 return false;
             }
             
             if (header[1] != Socks5::REPLY_SUCCESS) {
-                Core::Logger::Error("SOCKS5: Connection refused by proxy. Reply Code: " + std::to_string(header[1]));
+                Core::Logger::Error("SOCKS5: 代理服务器拒绝连接. 错误码: " + std::to_string(header[1]));
                 return false;
             }
             
@@ -136,7 +136,7 @@ namespace Network {
                     break;
                 }
                 default:
-                    Core::Logger::Error("SOCKS5: Unknown address type in response: " + std::to_string(atyp));
+                    Core::Logger::Error("SOCKS5: 未知的地址类型: " + std::to_string(atyp));
                     return false;
             }
             
@@ -144,7 +144,7 @@ namespace Network {
             if (addrLen > 0) {
                 std::vector<uint8_t> trash(addrLen);
                 if (!ReadExact(sock, trash.data(), addrLen)) {
-                    Core::Logger::Error("SOCKS5: Failed to read bind address");
+                    Core::Logger::Error("SOCKS5: 读取绑定地址失败");
                     return false;
                 }
             }
@@ -152,11 +152,11 @@ namespace Network {
             // Consume Port (2 bytes)
             uint8_t portBuf[2];
             if (!ReadExact(sock, portBuf, 2)) {
-                Core::Logger::Error("SOCKS5: Failed to read bind port");
+                Core::Logger::Error("SOCKS5: 读取绑定端口失败");
                 return false;
             }
             
-            Core::Logger::Info("SOCKS5: Tunnel established to " + targetHost + ":" + std::to_string(targetPort));
+            Core::Logger::Info("SOCKS5: 隧道建立成功 目标: " + targetHost + ":" + std::to_string(targetPort));
             return true;
         }
     };

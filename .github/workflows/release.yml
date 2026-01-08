@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "发布版本号（示例：1.2 或 1.2.3）"
+        required: true
+        default: "1.1"
 
 permissions:
   contents: write
@@ -16,9 +22,31 @@ jobs:
       matrix:
         arch: [x64, x86]
 
+    outputs:
+      release_tag: ${{ steps.prepare_version.outputs.release_tag }}
+      release_version: ${{ steps.prepare_version.outputs.release_version }}
+
     steps:
     - name: 检出仓库
       uses: actions/checkout@v4
+
+    # 统一版本号与 tag，兼容 tag 触发与手动触发
+    - name: 准备版本号
+      id: prepare_version
+      shell: pwsh
+      run: |
+        if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+          $rawVersion = "${{ inputs.version }}"
+          $normalized = $rawVersion.Trim()
+          if ($normalized.StartsWith("v")) { $normalized = $normalized.Substring(1) }
+          $tag = "v$normalized"
+        } else {
+          $tag = "${{ github.ref_name }}"
+          $normalized = $tag
+          if ($normalized.StartsWith("v")) { $normalized = $normalized.Substring(1) }
+        }
+        "release_tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+        "release_version=$normalized" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
     # 使用 build.ps1 统一编译逻辑，避免与本地流程偏差
     - name: 执行编译脚本（Release，先清理）
@@ -30,7 +58,7 @@ jobs:
       id: package
       shell: pwsh
       run: |
-        $zipName = "antigravity-proxy-${{ github.ref_name }}-win-${{ matrix.arch }}.zip"
+        $zipName = "antigravity-proxy-${{ steps.prepare_version.outputs.release_tag }}-win-${{ matrix.arch }}.zip"
         $zipPath = Join-Path $env:RUNNER_TEMP $zipName
         if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
         Compress-Archive -Path "output/*" -DestinationPath $zipPath -Force
@@ -58,5 +86,8 @@ jobs:
     - name: 发布 GitHub Release
       uses: softprops/action-gh-release@v2
       with:
+        tag_name: ${{ needs.build.outputs.release_tag }}
+        name: ${{ needs.build.outputs.release_tag }}
+        target_commitish: ${{ github.sha }}
         files: release-assets/**/*.zip
         generate_release_notes: true
